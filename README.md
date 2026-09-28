@@ -1,0 +1,2 @@
+# deliverBot
+Tema 09 — DeliveryBot — Pedidos de restaurante Cenário: Restaurantes confirmam pedidos manualmente um a um. O sistema deve: Cadastro de cardápio e pedidos. Envia confirmação do pedido, tempo estimado e aviso de "saiu para entrega"; fila de preparo visível para a cozinha.  Entidades mínimas do banco: clientes, produtos, pedidos, itens_pedido, fila_preparo, mensagens Segunda API: ViaCEP — validar área de entrega pelo CEP

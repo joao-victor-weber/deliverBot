@@ -67,12 +67,7 @@ def montar_mensagem_confirmacao(pedido: dict) -> str:
 
 
 _TEXTOS_STATUS = {
-    "CONFIRMADO": (
-        "Pedido confirmado.\nRecebemos o seu pedido. "
-        "Você pode retirar seu pedido em aproximadamente {tempo} minutos..."
-    ),
     "EM_PREPARO": "Seu pedido está em preparo na cozinha... 👨‍🍳",
-    "PRONTO": "Pronto para retirada.\nPode vir, seu pedido já está lhe aguardando...",
     "SAIU_PARA_ENTREGA": "Seu pedido saiu para entrega! 🛵 Em breve ele chegará até você.",
     "ENTREGUE": "Pedido entregue. Bom apetite! 🍔",
     "RETIRADO": "Pedido retirado. Obrigado pela preferência, volte sempre! 🏴‍☠️",
@@ -81,7 +76,39 @@ _TEXTOS_STATUS = {
 
 
 def montar_mensagem_status(pedido: dict, novo_status: str) -> str:
-    modelo = _TEXTOS_STATUS.get(novo_status, f"Status do pedido atualizado: {novo_status}")
-    texto = modelo.format(tempo=pedido["tempo_estimado_min"])
-    return f"Atualização Pedido {pedido['numero_pedido']}\n{texto}"
+    forma_entrega = (pedido.get("forma_entrega") or "").upper()
+    tempo = pedido["tempo_estimado_min"]
 
+    if novo_status == "CONFIRMADO":
+        if forma_entrega == "ENTREGA":
+            texto = (
+                "Pedido confirmado.\n"
+                "Recebemos o seu pedido. "
+                f"A entrega está prevista para aproximadamente {tempo} minutos."
+            )
+        else:
+            texto = (
+                "Pedido confirmado.\n"
+                "Recebemos o seu pedido. "
+                f"Você pode retirar seu pedido em aproximadamente {tempo} minutos."
+            )
+
+    elif novo_status == "PRONTO":
+        if forma_entrega == "ENTREGA":
+            texto = (
+                "Seu pedido está pronto! 🍔\n"
+                "Agora ele será encaminhado para entrega."
+            )
+        else:
+            texto = (
+                "Pronto para retirada.\n"
+                "Pode vir, seu pedido já está lhe aguardando..."
+            )
+
+    else:
+        texto = _TEXTOS_STATUS.get(
+            novo_status,
+            f"Status do pedido atualizado: {novo_status}"
+        )
+
+    return f"Atualização Pedido {pedido['numero_pedido']}\n{texto}"

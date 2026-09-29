@@ -1,0 +1,69 @@
+# Sobe o WAHA (WhatsApp HTTP API) + o N8N (orquestrador do bot) localmente.
+#
+# Uso:
+#   1. Rode o app Flask primeiro (fora do Docker): python -m src.app
+#   2. Suba os dois serviços:                      docker compose up
+#   3. Abra http://localhost:3000 (WAHA) e escaneie o QR Code com o WhatsApp
+#      do seu celular (Aparelhos conectados > Conectar aparelho). O webhook já
+#      vem configurado sozinho (variável WHATSAPP_HOOK_URL abaixo).
+#      Login do dashboard/Swagger do WAHA: admin / deliverybot123 (fixo aqui
+#      embaixo, pra você nunca mais ficar sem lembrar a senha).
+#   4. Abra http://localhost:5678 (N8N), importe n8n/deliverybot-waha.json
+#      (Menu ... > Import from File) e ATIVE o workflow (toggle no topo).
+#
+# host.docker.internal aponta pro "localhost" da sua máquina de dentro dos
+# containers — é assim que o N8N alcança o Flask (rodando fora do Docker).
+
+services:
+  waha:
+    image: devlikeapro/waha
+    container_name: deliverybot-waha
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Aponta direto pro Flask (sem precisar do n8n pra esse teste).
+      WHATSAPP_HOOK_URL: "http://host.docker.internal:5000/webhook/waha"
+      WHATSAPP_HOOK_EVENTS: "message"
+      # A engine WEBJS tem um bug conhecido ("No LID for user") com
+      # atualizações recentes do WhatsApp Web. GOWS é a engine recomendada
+      # pela própria comunidade do WAHA pra evitar esse erro.
+      WHATSAPP_DEFAULT_ENGINE: GOWS
+      # Credenciais FIXAS do dashboard/Swagger do WAHA (localhost:3000).
+      # Sem isso, o WAHA gera uma senha aleatória sozinho na 1a vez que sobe
+      # e ela fica só dentro do volume — troque aqui se quiser outra senha.
+      WAHA_DASHBOARD_USERNAME: admin
+      WAHA_DASHBOARD_PASSWORD: deliverybot123
+      WHATSAPP_SWAGGER_USERNAME: admin
+      WHATSAPP_SWAGGER_PASSWORD: deliverybot123
+      WAHA_API_KEY: deliverybot-local-key
+    volumes:
+      - waha_sessions:/app/.sessions
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - deliverybot
+
+  n8n:
+    image: n8nio/n8n
+    container_name: deliverybot-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_SECURE_COOKIE: "false"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n:/home/node/workflows:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - deliverybot
+
+networks:
+  deliverybot:
+    driver: bridge
+
+volumes:
+  waha_sessions:
+  n8n_data:

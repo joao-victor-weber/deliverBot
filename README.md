@@ -1,218 +1,178 @@
-# DeliveryBot 🤖🍔 — Bot de Pedidos para Restaurante via WhatsApp
+# DeliveryBot — pedidos de restaurante via WhatsApp
 
-> Tema 09 — DeliveryBot: Pedidos de restaurante
-> Cenário: restaurantes confirmam pedidos manualmente um a um.
-> O sistema deve: cadastro de cardápio e pedidos; enviar confirmação do pedido,
-> tempo estimado e aviso de "saiu para entrega"; fila de preparo visível para a cozinha.
-> Segunda API: ViaCEP — validar área de entrega pelo CEP.
-> Entidades mínimas do banco: clientes, produtos, pedidos, itens_pedido, fila_preparo, mensagens.
+Projeto acadêmico do **Tema 09 — DeliveryBot**. O sistema organiza pedidos de restaurante, registra clientes e itens, apresenta uma fila de preparo para a cozinha e gera notificações conforme o pedido avança. Para entrega, utiliza a **API ViaCEP** na consulta de endereço e na verificação do município atendido.
 
-Inspirado no fluxo do projeto [Pirata-dos-Hamburguer](https://github.com/Kennedy-Mariano/Pirata-dos-Hamburguer)
-(automação com Flask + WhatsApp Business Cloud API) e nos prints de atendimento
-anexados (menu numerado, link de pedido único, confirmação com número de pedido,
-atualizações de status e um cupom "DOCUMENTO NÃO FISCAL").
+**Repositório:** https://github.com/joao-victor-weber/deliverBot
 
-## Como o fluxo funciona (igual aos prints)
+> Estado da validação: em 28/09/2026, a execução local compartilhada pelo grupo apresentou **9 testes automatizados aprovados** e demonstrou manualmente o fluxo de entrega em modo de mensagens simuladas. Isso não constitui certificação para uso em produção nem comprova o envio por um provedor real de WhatsApp.
 
-1. Cliente manda qualquer mensagem no WhatsApp → bot responde com o menu:
-   ```
-   1 - Horário de funcionamento
-   2 - Realizar pedidos
-   3 - Formas de pagamento
-   4 - Cardápio
-   5 - Telefone
-   6 - Promoções
-   7 - Taxa de entrega
-   8 - Endereço
-   ```
-2. Cliente digita **2** → o bot gera um **link único de pedido**
-   (`/m/<token>`), válido para **um único pedido** — depois de usado ou expirado
-   o link não abre outro pedido.
-3. Cliente escolhe os itens na página do link, informa forma de pagamento e
-   CEP (validado na hora com a **ViaCEP**).
-4. Ao confirmar, o bot manda no WhatsApp:
-   *"Seu pedido #21535858 foi realizado com sucesso. Vou te atualizando sobre
-   o processo do seu pedido por aqui."* + o **cupom formatado** (igual ao print
-   "DOCUMENTO NÃO FISCAL").
-5. O pedido entra na **fila de preparo** (visível para a cozinha em
-   `/cozinha`). Cada mudança de status dispara uma mensagem automática:
-   - `Pedido confirmado. Recebemos o seu pedido. Você pode retirar seu pedido em
-     aproximadamente 40 minutos...`
-   - `Pronto para retirada. Pode vir, seu pedido já está lhe aguardando...`
+## Funcionalidades
 
-## Estrutura de pastas
+- Cardápio carregado de `data/cardapio.json` para a tabela `produtos` na inicialização do banco; listagem dos produtos ativos na página de pedidos.
+- Atendimento por menu numerado, geração de **link individual** com expiração e impedimento de reutilização após o pedido.
+- Registro do cliente, pedido, itens, modalidade (entrega/retirada), pagamento, valores e taxa de entrega.
+- Consulta de CEP pela ViaCEP e validação do município informado em `CIDADES_ATENDIDAS` quando a modalidade for `ENTREGA`.
+- Mensagens de confirmação, previsão aproximada, recibo marcado **DOCUMENTO NÃO FISCAL** e avisos de status.
+- Painel `/cozinha`, com atualização automática da página e avanço manual das etapas de preparo e entrega.
+- Histórico de mensagens de entrada e saída na tabela `mensagens`.
+- Três opções de envio: `TESTE` (terminal), `WAHA` (integração opcional) e `META` (Cloud API opcional).
 
-```
-deliverybot/
-├── requirements.txt
-├── docker-compose.yml       -> sobe WAHA + N8N (WhatsApp real via QR Code)
-├── .env.example
-├── n8n/
-│   └── deliverybot-waha.json -> workflow pronto pra importar no N8N
-├── sql/schema.sql          -> clientes, produtos, pedidos, itens_pedido, fila_preparo, mensagens
-├── data/cardapio.json      -> cardápio inicial (usado no seed do banco)
-├── src/
-│   ├── config.py           -> lê variáveis do .env
-│   ├── db.py                -> conexão SQLite + criação/seed do banco
-│   ├── viacep.py             -> valida CEP / área de entrega (API ViaCEP)
-│   ├── cardapio.py           -> consultas de produtos/cardápio
-│   ├── pedidos.py            -> regra de negócio: criar pedido, gerar nº, calcular total
-│   ├── links.py               -> geração/validação do link único de pedido (token de uso único)
-│   ├── recibo.py               -> monta o cupom "DOCUMENTO NÃO FISCAL" (texto)
-│   ├── fila.py                  -> fila de preparo da cozinha + mudança de status
-│   ├── whatsapp.py               -> envio de mensagens via WhatsApp Business Cloud API (Meta)
-│   ├── bot.py                     -> máquina de estados da conversa (o menu 1-8)
-│   └── app.py                      -> servidor Flask: webhook do WhatsApp + página do link + painel da cozinha
-├── web/templates/
-│   ├── pedido.html                 -> formulário de pedido (o link único abre isso)
-│   ├── pedido_sucesso.html
-│   ├── link_invalido.html
-│   └── cozinha.html                 -> painel da fila de preparo (para o restaurante)
-└── tests/
-    └── test_pedidos.py
+## Fluxos do pedido
+
+**Entrega:** `AGUARDANDO → EM_PREPARO → PRONTO → SAIU_PARA_ENTREGA → ENTREGUE`.
+
+**Retirada no balcão:** `AGUARDANDO → EM_PREPARO → PRONTO → RETIRADO`.
+
+No registro do pedido, o sistema gera confirmação e tempo estimado. Quando a modalidade é entrega, a etapa `PRONTO` é comunicada como preparação para o envio, e `SAIU_PARA_ENTREGA` gera o aviso de saída ao cliente. A fila deixa de listar pedidos finalizados.
+
+## Tecnologias e dependências
+
+- Python 3.12 (ambiente utilizado nos testes informados pelo grupo).
+- Flask 3.0.3 — aplicação web e rotas HTTP.
+- SQLite — persistência relacional local.
+- Requests 2.32.3 — consultas HTTP, inclusive ViaCEP.
+- python-dotenv 1.0.1 — leitura da configuração de ambiente.
+- pytest 8.3.3 — testes automatizados.
+- HTML e templates Jinja — formulários e painel da cozinha.
+- Docker Compose, WAHA e n8n — integrações opcionais de mensagens/automação; **não são necessários no modo TESTE**.
+
+As versões das bibliotecas estão fixadas em `requirements.txt`.
+
+## Instalação no Windows (PowerShell)
+
+Execute na pasta raiz do repositório:
+
+```powershell
+git clone https://github.com/joao-victor-weber/deliverBot.git
+cd deliverBot
+py -3.12 -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
 ```
 
-## 1. Instalação
+Se o comando `py -3.12` não estiver disponível e já houver Python instalado, utilize `python -m venv venv`. Se a ativação for bloqueada pelo PowerShell, use `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` somente no terminal atual e tente ativar novamente.
 
-```bash
-cd deliverybot
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env
+No `.env`, revise **antes de fazer um pedido de entrega**:
+
+```dotenv
+WHATSAPP_PROVIDER=TESTE
+BASE_URL=http://localhost:5000
+DATABASE_PATH=data/deliverybot.db
+TEMPO_PREPARO_MIN=40
+TAXA_ENTREGA=6.00
+CIDADES_ATENDIDAS=União da Vitória
 ```
 
-Rodando sem preencher nada no `.env`, o sistema funciona em **modo teste**:
-o banco (SQLite) é criado sozinho em `data/deliverybot.db` e as mensagens que
-seriam enviadas ao WhatsApp aparecem só no console, com o prefixo
-`[MODO TESTE] enviaria para 5547...:`. Isso permite testar toda a lógica do
-bot e do cardápio antes de ter as credenciais da Meta.
+**Atenção à acentuação:** use a grafia do município devolvida pela ViaCEP; `Uniao da Vitoria` sem acentos pode não coincidir com `União da Vitória`. Para atender mais de um município, separe-os por vírgula. A checagem implementada é **por município**, não por distância em quilômetros; a presença de `RAIO_ENTREGA_KM` no arquivo de configuração não significa que esse raio seja aplicado na validação atual.
 
-Simule um pedido de ponta a ponta sem precisar do WhatsApp real:
+Nunca publique o `.env` com tokens, chaves ou telefones reais. O arquivo `.env.example` contém apenas valores de exemplo.
 
-```bash
-python -m src.main_teste
+## Execução e demonstração local
+
+```powershell
+python -m src.app
 ```
 
-## 2. Conectando no WhatsApp de verdade — duas opções
+Acesse `http://127.0.0.1:5000/testar` para simular a geração de um link de pedido e `http://127.0.0.1:5000/cozinha` para acompanhar a fila. Em modo `TESTE`, as notificações aparecem no terminal com o marcador `[MODO TESTE]` e **não são mensagens entregues pelo WhatsApp**.
 
-### Opção A (recomendada para testar rápido): WAHA + Docker, login por QR Code
+Roteiro de demonstração:
 
-Essa é a forma mais rápida de testar com o **seu próprio número de WhatsApp**,
-sem precisar de conta comercial verificada nem esperar aprovação da Meta —
-é o mesmo [WAHA](https://waha.devlike.pro/) usado por trás do N8N no vídeo
-[N8N + WhatsApp GRÁTIS](https://www.youtube.com/watch?v=KkKlfAb3TSI), só que
-aqui chamado direto do Python, sem precisar do N8N.
+1. Abra `/testar`, selecione produto e modalidade `ENTREGA`, informe um CEP de município permitido e conclua o pedido.
+2. Confira no terminal a confirmação, o recibo não fiscal e o prazo estimado.
+3. Abra `/cozinha` e avance para `EM_PREPARO`, `PRONTO`, `SAIU_PARA_ENTREGA` e `ENTREGUE`.
+4. Confira a notificação de saída para entrega e a saída do pedido finalizado da fila.
+5. Em uma tentativa separada, informe CEP válido de município não atendido e confirme a rejeição. O resultado desta tentativa deve ser capturado como evidência antes da entrega acadêmica.
+6. Teste também a modalidade `RETIRADA BALCAO`, cujo encerramento correto é `RETIRADO`.
 
-1. Instale o [Docker Desktop](https://docker.com).
-2. No `.env`, defina `WHATSAPP_PROVIDER=WAHA`.
-3. Rode o servidor Flask: `python -m src.app` (deixe essa janela aberta).
-4. Em outro terminal, suba o WAHA: `docker compose up`.
-5. Abra `http://localhost:3000` no navegador — é o Swagger/Dashboard do WAHA.
-   Vá em `GET /api/screenshot` (ou na aba Dashboard) para ver o **QR Code** e
-   escaneie com o WhatsApp do seu celular, em **Aparelhos conectados → Conectar
-   um aparelho**.
-6. Pronto — assim que a sessão ficar `WORKING`, qualquer mensagem que
-   alguém mandar pro **seu número de WhatsApp** cai automaticamente no
-   webhook `http://localhost:5000/webhook/waha` (o `docker-compose.yml` já
-   configura isso sozinho) e o bot responde na hora.
+A rota `/testar` e o servidor Flask com depuração ativa destinam-se **exclusivamente ao desenvolvimento**; não exponha esse servidor na internet.
 
-> Atenção: o WAHA usa o WhatsApp Web por baixo dos panos. Use um número que
-> você não se importe de conectar a um "aparelho" extra (dá pra usar seu
-> WhatsApp normal mesmo, ele só aparece na lista de aparelhos conectados).
+## API ViaCEP
 
-### Opção C: WAHA + N8N (o mesmo arranjo do vídeo, orquestrado visualmente)
+Requisição HTTP realizada pelo módulo `src/viacep.py`:
 
-Aqui o **N8N** vira o "cérebro" que liga o WAHA no Flask: ele recebe o evento
-do WAHA, manda o texto pro Flask decidir a resposta (reaproveitando a mesma
-lógica de `bot.py`, sem duplicar nada), e manda a resposta de volta pro WAHA.
-É útil se você quiser mostrar visualmente o fluxo no trabalho, ou plugar
-outras automações (IA, planilhas, etc.) depois sem mexer no Python.
-
-1. Instale o [Docker Desktop](https://docker.com).
-2. Rode o Flask fora do Docker: `python -m src.app` (deixe aberto).
-3. Suba o WAHA **e** o N8N juntos: `docker compose up`.
-4. Abra `http://localhost:3000` (WAHA) e escaneie o QR Code com o WhatsApp
-   do seu celular, em **Aparelhos conectados → Conectar um aparelho**. O
-   webhook do WAHA já sai configurado sozinho apontando pro N8N (variável
-   `WHATSAPP_HOOK_URL` no `docker-compose.yml`).
-5. Abra `http://localhost:5678` (N8N), crie sua conta local (é só local,
-   fica na sua máquina) e importe o workflow pronto:
-   **Menu (⋯) → Import from File → `n8n/deliverybot-waha.json`**.
-6. **Ative o workflow** (toggle no canto superior direito do editor).
-7. Pronto: mande uma mensagem pro seu número de WhatsApp. O caminho é
-   `WhatsApp real → WAHA → N8N (decide) → Flask /api/bot/mensagem (aplica a
-   regra de negócio) → N8N manda a resposta de volta pro WAHA → WhatsApp`.
-
-O workflow importado tem 6 nós:
-- **Webhook WAHA** — recebe o evento cru do WAHA.
-- **É mensagem de cliente?** — filtra eventos que não são `message` ou que
-  foram enviados pelo próprio bot (`fromMe`).
-- **Processar no Bot (Flask)** — `POST /api/bot/mensagem` com
-  `{telefone, texto, nome}`, recebe `{resposta}`.
-- **Enviar resposta (WAHA)** — `POST /api/sendText` com a resposta.
-- **Responder 200** (dois nós) — confirma o recebimento do webhook pro WAHA
-  não ficar reenviando o mesmo evento.
-
-> Se preferir mexer no fluxo dentro do N8N (textos, novas opções de menu,
-> etc.) em vez de editar `bot.py`, dá pra trocar o nó **Processar no Bot** por
-> nós de lógica do próprio N8N (Switch/Set) — só que aí o link único de
-> pedido (`/m/<token>`) e o cardápio continuam vindo do Flask, porque
-> precisam do banco de dados.
-
-### Opção D: WhatsApp Business Cloud API (Meta) — oficial
-
-Essa é a forma **oficial** de um bot Python conversar com o WhatsApp real
-(é o mesmo caminho usado no projeto de referência Pirata-dos-Hamburguer):
-
-1. Crie uma conta em [developers.facebook.com](https://developers.facebook.com/)
-   e um **App do tipo "Business"**.
-2. No app, adicione o produto **WhatsApp**. A Meta te dá automaticamente um
-   número de teste, um **Phone Number ID** e um **token de acesso temporário**
-   (24h) — dá para testar tudo com eles antes de ter um número comercial
-   definitivo.
-3. Copie para o `.env`:
-   ```
-   WHATSAPP_TOKEN=seu_token_de_acesso
-   WHATSAPP_PHONE_NUMBER_ID=id_do_numero
-   WHATSAPP_VERIFY_TOKEN=uma_palavra_secreta_que_voce_escolhe
-   BASE_URL=https://SEU-DOMINIO-PUBLICO
-   ```
-4. Rode o servidor:
-   ```bash
-   python -m src.app
-   ```
-5. Deixe a porta 5000 pública (em desenvolvimento, use o
-   [ngrok](https://ngrok.com/): `ngrok http 5000`) e copie a URL https gerada
-   para `BASE_URL` no `.env` — é esse domínio que vira o link
-   `https://SEU-DOMINIO/m/<token>` mandado ao cliente.
-6. No painel do app da Meta, em **WhatsApp → Configuração → Webhooks**,
-   cadastre:
-   - Callback URL: `https://SEU-DOMINIO/webhook`
-   - Verify Token: o mesmo valor de `WHATSAPP_VERIFY_TOKEN`
-   - Inscreva-se no campo `messages`.
-7. No seu celular, mande qualquer mensagem para o número de teste da Meta —
-   o bot já responde com o menu.
-
-> Para usar em produção com o **seu próprio número comercial** (não o número
-> de teste da Meta), é preciso verificar o WhatsApp Business Account e trocar
-> o token temporário por um **token permanente de usuário do sistema**, mas o
-> código não muda — só as credenciais no `.env`.
-
-## 3. Painel da cozinha (fila de preparo)
-
-Acesse `http://localhost:5000/cozinha` (ou o seu domínio) para ver a fila de
-preparo em tempo real e clicar para avançar o status de cada pedido
-("Confirmado" → "Em preparo" → "Pronto para retirada" → "Entregue"). Cada
-clique dispara automaticamente a mensagem correspondente no WhatsApp do
-cliente.
-
-## 4. Testes automatizados
-
-```bash
-pip install -r requirements-dev.txt   # já incluso em requirements.txt (pytest)
-pytest -v
+```text
+GET https://viacep.com.br/ws/{cep}/json/
 ```
 
-Os testes cobrem: geração de número de pedido, cálculo de total, geração e
-invalidação do link único, validação de CEP e montagem do cupom.
+O módulo remove a pontuação do CEP, exige oito dígitos, consulta o serviço, interpreta a resposta e utiliza `localidade` e `uf` para compor o endereço e verificar a cidade configurada. Retornos inválidos, inexistentes ou falha de consulta impedem o pedido de entrega. Não há cálculo de geolocalização ou quilometragem nessa integração.
+
+**Documentação oficial:** https://viacep.com.br/
+
+## Principais rotas HTTP
+
+| Método | Rota | Finalidade |
+|---|---|---|
+| GET | `/testar` | Simulação local e criação do link individual |
+| GET | `/m/<token>` | Exibição do formulário/cardápio para um token válido |
+| POST | `/m/<token>` | Cadastro do pedido e notificações iniciais |
+| GET | `/cozinha` | Visualização da fila |
+| POST | `/cozinha/avancar/<pedido_id>` | Avanço de status |
+| GET/POST | `/webhook` | Verificação/recebimento da Meta Cloud API |
+| POST | `/webhook/waha` | Recebimento de eventos WAHA |
+| POST | `/api/bot/mensagem` | Processamento de mensagem para a integração n8n |
+
+`<token>` e `<pedido_id>` são parâmetros de rota, não valores fixos.
+
+## Banco de dados
+
+**Banco:** SQLite. **Definição:** `sql/schema.sql`. **Inicialização:** `src/db.py`. **Cardápio inicial:** `data/cardapio.json`.
+
+| Entidade | Finalidade e vínculo principal |
+|---|---|
+| `clientes` | Identificação e contato do cliente; referenciada por `pedidos` |
+| `produtos` | Catálogo, categorias, preço e indicador de atividade |
+| `pedidos` | Modalidade, pagamento, prazo, totais, status; referência ao cliente |
+| `itens_pedido` | Produtos, quantidades e preço unitário vinculados ao pedido |
+| `fila_preparo` | Ordem e status de preparo, com um registro por pedido |
+| `mensagens` | Registro de comunicação de entrada/saída por telefone |
+| `links_pedido` | Token único, expiração, uso e pedido correspondente |
+| `sessoes_bot` | Estado do atendimento por telefone |
+
+As **seis primeiras** são as entidades mínimas especificadas pelo professor; as duas últimas suportam o fluxo de atendimento. A definição do banco fica versionada, mas arquivos de banco preenchidos com dados reais devem ser mantidos fora do versionamento.
+
+## Estrutura de pastas (resumo)
+
+```text
+src/                 lógica da aplicação e integrações
+web/templates/       formulário e painel de cozinha
+sql/schema.sql       estrutura do banco
+data/cardapio.json   cardápio inicial
+n8n/                 workflow opcional de integração WAHA
+tests/              testes automatizados
+.env.example         exemplo de configuração sem segredos
+requirements.txt     dependências Python
+docker-compose.yml   serviços opcionais WAHA/n8n
+```
+
+## Testes
+
+```powershell
+python -m pytest -v
+```
+
+Em 28/09/2026, o grupo apresentou execução local com **9 testes aprovados**. A suíte inclui número do pedido, cálculo de valores e taxa, unicidade e invalidação do link, avanço da fila, conteúdo do recibo, sequência completa da entrega e texto das notificações de entrega. Os testes não substituem demonstrações do ViaCEP com resposta real nem teste de envio de mensagem por provedor externo.
+
+## Integrações opcionais e segurança
+
+O projeto disponibiliza configuração para WAHA/n8n por `docker compose` e para Meta Cloud API por variáveis de ambiente. Para essas opções, consulte o `docker-compose.yml`, `n8n/deliverybot-waha.json` e as configurações de `src/config.py`/`src/whatsapp.py`.
+
+- Antes de publicar ou expor a infraestrutura, **substitua qualquer credencial demonstrativa presente no Compose**, configure autenticação e restrinja acesso à cozinha, ao endpoint de teste e aos serviços auxiliares.
+- Nunca reutilize as credenciais de exemplo em serviços expostos.
+- Evite versionar `.env`, bancos reais, logs e dados de clientes.
+- O modo `TESTE` é suficiente para demonstrar os requisitos acadêmicos sem integrar um número pessoal ao WhatsApp.
+
+## Escopo e limitações
+
+Este repositório é um protótipo acadêmico. O cardápio é cadastrado inicialmente por seed JSON/SQLite; não se deve descrever a interface atual como um painel administrativo completo de CRUD. A restrição geográfica de entrega utiliza o nome do município fornecido pelo ViaCEP, não um cálculo de raio. O painel e o servidor de desenvolvimento não demonstram autenticação ou endurecimento para operação pública. Os testes documentados ocorreram no ambiente local, predominantemente no modo `TESTE`.
+
+## Fontes oficiais e documentação
+
+- Repositório do grupo: https://github.com/joao-victor-weber/deliverBot
+- ViaCEP: https://viacep.com.br/
+- Flask: https://flask.palletsprojects.com/en/stable/
+- Python / SQLite: https://docs.python.org/3/library/sqlite3.html
+- pytest: https://docs.pytest.org/en/stable/
+- Manual de Normas Técnicas para Trabalhos Acadêmicos – Coligadas UB: https://laranjeiras.camporeal.edu.br/content/uploads/2023/11/Manual-de-Normas-Tecnicas-para-Trabalhos-Academicos-Coligadas-UB.pdf
+
+**Grupo:** preencher os nomes completos e os dados institucionais no relatório acadêmico, conforme orientações do professor.

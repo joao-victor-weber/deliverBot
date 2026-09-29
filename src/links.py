@@ -7,7 +7,7 @@ Cada link (`/m/<token>`) enviado ao cliente serve para UM único pedido:
   cai numa página de "link inválido/expirado" em vez de abrir outro pedido.
 """
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from . import config
 from .db import get_conn
@@ -17,7 +17,7 @@ _FORMATO_DATA = "%Y-%m-%d %H:%M:%S"
 
 def gerar_link_pedido(telefone: str) -> str:
     token = secrets.token_urlsafe(12)
-    expira_em = (datetime.utcnow() + timedelta(minutes=config.VALIDADE_LINK_MIN)).strftime(_FORMATO_DATA)
+    expira_em = (datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=config.VALIDADE_LINK_MIN)).strftime(_FORMATO_DATA)
 
     with get_conn() as conn:
         conn.execute(
@@ -40,7 +40,7 @@ def link_valido(token: str) -> tuple[bool, str, dict | None]:
         return False, "Este link de pedido não existe.", None
     if link["usado"]:
         return False, "Este link já foi usado para um pedido e não pode ser reutilizado.", link
-    if datetime.utcnow() > datetime.strptime(link["expira_em"], _FORMATO_DATA):
+    if datetime.now(timezone.utc).replace(tzinfo=None) > datetime.strptime(link["expira_em"], _FORMATO_DATA):
         return False, "Este link de pedido expirou. Volte ao WhatsApp e digite 2 para gerar um novo.", link
     return True, "ok", link
 
@@ -51,3 +51,4 @@ def marcar_link_usado(token: str, pedido_id: int):
             "UPDATE links_pedido SET usado = 1, pedido_id = ? WHERE token = ?",
             (pedido_id, token),
         )
+

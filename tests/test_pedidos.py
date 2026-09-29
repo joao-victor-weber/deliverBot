@@ -134,3 +134,80 @@ def test_recibo_contem_documento_nao_fiscal_e_itens():
     assert "DOCUMENTO NAO FISCAL" in texto
     assert pedido["numero_pedido"] in texto
     assert produto["nome"] in texto
+
+
+def test_fluxo_completo_de_entrega(monkeypatch):
+    from src import cardapio, fila, pedidos
+
+    monkeypatch.setattr(
+        fila.whatsapp,
+        "enviar_mensagem",
+        lambda *args, **kwargs: None,
+    )
+
+    produto = cardapio.listar_produtos_ativos()[0]
+
+    pedido = pedidos.criar_pedido(
+        telefone="5547999991111",
+        nome_cliente="Cliente Delivery",
+        itens=[{"produto_id": produto["id"], "quantidade": 1}],
+        forma_pagamento="Pix",
+        forma_entrega="ENTREGA",
+    )
+
+    status_obtidos = []
+
+    for _ in range(4):
+        pedido_atualizado = fila.avancar_status(pedido["id"])
+        status_obtidos.append(pedido_atualizado["status"])
+
+    assert status_obtidos == [
+        "EM_PREPARO",
+        "PRONTO",
+        "SAIU_PARA_ENTREGA",
+        "ENTREGUE",
+    ]
+
+    fila_final = fila.listar_fila()
+
+    assert not any(
+        item["pedido_id"] == pedido["id"]
+        for item in fila_final
+    )
+
+
+def test_mensagens_de_entrega_nao_mandam_cliente_retirar():
+    from src import cardapio, pedidos, recibo
+
+    produto = cardapio.listar_produtos_ativos()[0]
+
+    pedido = pedidos.criar_pedido(
+        telefone="5547999992222",
+        nome_cliente="Cliente Mensagem",
+        itens=[{"produto_id": produto["id"], "quantidade": 1}],
+        forma_pagamento="Dinheiro",
+        forma_entrega="ENTREGA",
+    )
+
+    confirmacao = recibo.montar_mensagem_status(
+        pedido,
+        "CONFIRMADO",
+    )
+
+    pronto = recibo.montar_mensagem_status(
+        pedido,
+        "PRONTO",
+    )
+
+    saiu = recibo.montar_mensagem_status(
+        pedido,
+        "SAIU_PARA_ENTREGA",
+    )
+
+    assert "entrega" in confirmacao.lower()
+    assert "retirar" not in confirmacao.lower()
+
+    assert "entrega" in pronto.lower()
+    assert "retirada" not in pronto.lower()
+
+    assert "saiu para entrega" in saiu.lower()

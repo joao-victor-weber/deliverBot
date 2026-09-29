@@ -73,6 +73,7 @@ _TEXTOS_STATUS = {
     ),
     "EM_PREPARO": "Seu pedido está em preparo na cozinha... 👨‍🍳",
     "PRONTO": "Pronto para retirada.\nPode vir, seu pedido já está lhe aguardando...",
+    "SAIU_PARA_ENTREGA": "Seu pedido saiu para entrega! 🛵 Em breve ele chegará até você.",
     "ENTREGUE": "Pedido entregue. Bom apetite! 🍔",
     "RETIRADO": "Pedido retirado. Obrigado pela preferência, volte sempre! 🏴‍☠️",
     "CANCELADO": "Seu pedido foi cancelado. Qualquer dúvida, é só chamar por aqui.",
@@ -83,3 +84,4 @@ def montar_mensagem_status(pedido: dict, novo_status: str) -> str:
     modelo = _TEXTOS_STATUS.get(novo_status, f"Status do pedido atualizado: {novo_status}")
     texto = modelo.format(tempo=pedido["tempo_estimado_min"])
     return f"Atualização Pedido {pedido['numero_pedido']}\n{texto}"
+

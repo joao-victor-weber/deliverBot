@@ -145,7 +145,7 @@ def enviar_pedido(token):
 
     endereco = ""
     if forma_entrega == "ENTREGA":
-        ok_cep, msg_cep, dados_cep = viacep.validar_area_entrega(cep)
+        ok_cep, msg_cep, dados_cep = viacep.validar_area_entrega(cep, config.CIDADES_ATENDIDAS)
         if not ok_cep:
             produtos = cardapio.listar_produtos_ativos()
             grupos = cardapio.agrupar_por_categoria(produtos)
@@ -223,3 +223,4 @@ def avancar_pedido(pedido_id):
 if __name__ == "__main__":
     init_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
+

@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS fila_preparo (
     pedido_id     INTEGER NOT NULL UNIQUE REFERENCES pedidos(id),
     posicao       INTEGER NOT NULL,
     status        TEXT NOT NULL DEFAULT 'AGUARDANDO',
-    -- AGUARDANDO -> EM_PREPARO -> PRONTO -> RETIRADO
+    -- RETIRADA: AGUARDANDO -> EM_PREPARO -> PRONTO -> RETIRADO
+    -- ENTREGA: AGUARDANDO -> EM_PREPARO -> PRONTO -> SAIU_PARA_ENTREGA -> ENTREGUE
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -79,3 +80,4 @@ CREATE TABLE IF NOT EXISTS sessoes_bot (
     estado        TEXT NOT NULL DEFAULT 'MENU',
     atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
 );
+

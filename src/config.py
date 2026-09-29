@@ -44,3 +44,11 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "data/deliverybot.db")
 # --- Operação ---
 TEMPO_PREPARO_MIN = int(os.getenv("TEMPO_PREPARO_MIN", "40"))
 VALIDADE_LINK_MIN = int(os.getenv("VALIDADE_LINK_MIN", "30"))
+
+# --- Area de entrega ---
+# Lista de cidades atendidas, separadas por virgula.
+CIDADES_ATENDIDAS = [
+    cidade.strip()
+    for cidade in os.getenv("CIDADES_ATENDIDAS", "Uniao da Vitoria").split(",")
+    if cidade.strip()
+]
